@@ -1,38 +1,45 @@
-const bcrypt = require('bcrypt')
-const jwt = require('jsonwebtoken')
-const User = require('../models/User')
+const authService = require('../services/authService')
+const logger = require('../utils/logger')
 
 const register = async (req, res) => {
   try {
     const { username, password } = req.body
-    if (!username || !password) return res.status(400).json({ error: 'Faltan datos' })
-
-    const existing = await User.findByUsername(username)
-    if (existing) return res.status(409).json({ error: 'Usuario ya existe' })
-
-    const hash = await bcrypt.hash(password, 10)
-    const id = await User.create(username, hash)
-    return res.json({ id, username })
+    const result = await authService.register(username, password)
+    
+    logger.success('Usuario registrado', { username: result.username })
+    return res.status(201).json(result)
   } catch (err) {
-    console.error(err)
-    return res.status(500).json({ error: 'Error interno' })
+    logger.error('Error en registro', err)
+    
+    if (err.message.includes('ya existe')) {
+      return res.status(409).json({ error: err.message })
+    }
+    if (err.message.includes('requerido') || err.message.includes('caracteres')) {
+      return res.status(400).json({ error: err.message })
+    }
+    
+    return res.status(500).json({ error: 'Error interno del servidor' })
   }
 }
 
 const login = async (req, res) => {
   try {
     const { username, password } = req.body
-    const user = await User.findByUsername(username)
-    if (!user) return res.status(401).json({ error: 'Credenciales inválidas' })
-
-    const ok = await bcrypt.compare(password, user.password)
-    if (!ok) return res.status(401).json({ error: 'Credenciales inválidas' })
-
-    const token = jwt.sign({ id: user.id, username: user.username }, process.env.JWT_SECRET, { expiresIn: '8h' })
-    return res.json({ token, user: { id: user.id, username: user.username } })
+    const result = await authService.login(username, password)
+    
+    logger.success('Login exitoso', { username })
+    return res.json(result)
   } catch (err) {
-    console.error(err)
-    return res.status(500).json({ error: 'Error interno' })
+    logger.error('Error en login', err)
+    
+    if (err.message.includes('inválidas') || err.message.includes('Credenciales')) {
+      return res.status(401).json({ error: 'Credenciales inválidas' })
+    }
+    if (err.message.includes('requerido') || err.message.includes('caracteres')) {
+      return res.status(400).json({ error: err.message })
+    }
+    
+    return res.status(500).json({ error: 'Error interno del servidor' })
   }
 }
 
